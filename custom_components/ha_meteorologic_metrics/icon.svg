@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Meteorologic Metrics icon">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1">
+      <stop offset="0" stop-color="#4fc3f7"/>
+      <stop offset="1" stop-color="#1976d2"/>
+    </linearGradient>
+    <linearGradient id="thermoGrad" x1="0" x2="1">
+      <stop offset="0" stop-color="#ffd166"/>
+      <stop offset="1" stop-color="#ff8a65"/>
+    </linearGradient>
+    <linearGradient id="mercury" x1="0" x2="0">
+      <stop offset="0" stop-color="#e63946"/>
+      <stop offset="1" stop-color="#b71c1c"/>
+    </linearGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+
+  <!-- background -->
+  <rect width="64" height="64" rx="10" fill="url(#bg)"/>
+
+  <!-- simple cloud centered in front -->
+  <g transform="translate(0,6)" filter="url(#softShadow)">
+    <path d="M16 34c0-6.6 5.4-12 12-12 1.6 0 3.1.3 4.5.8 2.4-5.2 7.6-8.8 13.5-8.8 6.6 0 12 5.4 12 12 0 6.6-5.4 12-12 12H16z"
+          fill="#FFFFFF" stroke="#F0F6FB" stroke-width="0.8" opacity="0.98"/>
+  </g>
+  <g transform="translate(10,6)">
+    <!-- stem background -->
+    <rect x="0" y="6" width="8" height="34" rx="4" fill="#ffffff" opacity="0.95"/>
+    <!-- inner stem -->
+    <rect x="2" y="9" width="4" height="28" rx="2" fill="url(#thermoGrad)"/>
+    <!-- mercury column -->
+    <rect x="2" y="20" width="4" height="12" rx="2" fill="url(#mercury)"/>
+    <!-- bulb -->
+    <circle cx="4" cy="40" r="6.2" fill="#ff6b6b" stroke="#fff" stroke-width="0.9"/>
+    <!-- small highlight -->
+    <circle cx="3" cy="38.2" r="1.1" fill="#fff" opacity="0.6"/>
+  </g>
+</svg>

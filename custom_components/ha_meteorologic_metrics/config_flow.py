@@ -2,14 +2,15 @@ from __future__ import annotations
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
+from homeassistant.helpers.selector import selector
 from .const import DOMAIN, CONF_TEMP, CONF_HUMIDITY, CONF_DEW_POINT, CONF_PRESSURE, CONF_NAME
 
 DATA_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_TEMP): str,
-        vol.Required(CONF_HUMIDITY): str,
-        vol.Required(CONF_PRESSURE): str,
-        vol.Optional(CONF_DEW_POINT, default=""): str,
+        vol.Required(CONF_TEMP): selector({"entity": {"domain": "sensor"}}),
+        vol.Required(CONF_HUMIDITY): selector({"entity": {"domain": "sensor"}}),
+        vol.Required(CONF_PRESSURE): selector({"entity": {"domain": "sensor"}}),
+        vol.Optional(CONF_DEW_POINT, default=""): selector({"entity": {"domain": "sensor"}}),
         vol.Optional(CONF_NAME, default="Meteorologic Metrics"): str,
     }
 )

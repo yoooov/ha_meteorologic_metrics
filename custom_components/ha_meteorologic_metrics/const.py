@@ -1,3 +1,4 @@
+DOMAIN = 'ha_meteorologic_metrics'
 CONF_TEMP = 'temp'
 CONF_HUMIDITY = 'hum'
 CONF_DEW_POINT = 'dew'

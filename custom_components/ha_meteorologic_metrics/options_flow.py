@@ -1,8 +1,9 @@
-"""Config flow options for Meteorologic Metrics integration (edit after creation)."""
+"""Config flow options for Meteorologic Metrics integration (edition after creation)."""
 
 from __future__ import annotations
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.helpers.selector import selector
 
 from .const import (
     CONF_TEMP,
@@ -31,10 +32,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         schema = vol.Schema(
             {
-                vol.Required(CONF_TEMP, default=current.get(CONF_TEMP, "")): str,
-                vol.Required(CONF_HUMIDITY, default=current.get(CONF_HUMIDITY, "")): str,
-                vol.Required(CONF_PRESSURE, default=current.get(CONF_PRESSURE, "")): str,
-                vol.Optional(CONF_DEW_POINT, default=current.get(CONF_DEW_POINT, "")): str,
+                vol.Required(CONF_TEMP, default=current.get(CONF_TEMP, "")): selector({"entity": {"domain": "sensor"}}),
+                vol.Required(CONF_HUMIDITY, default=current.get(CONF_HUMIDITY, "")): selector({"entity": {"domain": "sensor"}}),
+                vol.Required(CONF_PRESSURE, default=current.get(CONF_PRESSURE, "")): selector({"entity": {"domain": "sensor"}}),
+                vol.Optional(CONF_DEW_POINT, default=current.get(CONF_DEW_POINT, "")): selector({"entity": {"domain": "sensor"}}),
                 vol.Optional(CONF_NAME, default=current.get(CONF_NAME, "Meteorologic Metrics")): str,
             }
         )

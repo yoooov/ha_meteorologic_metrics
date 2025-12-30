@@ -6,6 +6,8 @@ from homeassistant.helpers import device_registry
 
 from .const import DOMAIN
 
+PLATFORMS = ["sensor"]  # used with the new config_entries helpers
+
 
 async def async_setup(hass: HomeAssistant, config: dict):
     # keep YAML support: if YAML config present, import to config entries (optional)
@@ -26,12 +28,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # reload integration when options are changed in the UI
     entry.add_update_listener(_async_update_listener)
 
-    await hass.config_entries.async_forward_entry_setup(entry, "sensor")
+    # Use the newer plural helper that accepts a list/tuple of platforms
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
-    unload_ok = await hass.config_entries.async_forward_entry_unload(entry, "sensor")
+    # Unload platforms using the appropriate helper
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
     return unload_ok
