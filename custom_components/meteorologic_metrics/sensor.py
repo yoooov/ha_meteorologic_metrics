@@ -152,15 +152,18 @@ class ClimateMetricsSensor(Entity):
                 self.comfort_level = self.determine_comfort(toC(self.dew_temp_estimate_c))
 
 
-            S=SI.state("DBT", self.temp_out_k,"RH", self.hum_out/100, self.pressure)
+            S = SI.state("DBT", self.temp_out_k,"RH", self.hum_out/100, self.pressure)
+
             self.S = S
+
             logger.debug("SI Results ================================ START")
-            logger.debug("The dry bulb temperature is "+ str(S[0]))
-            logger.debug("The specific enthalpy is "+ str(S[1]))
-            logger.debug("The relative humidity is "+ str(S[2]))
-            logger.debug("The specific volume is "+ str(S[3]))
-            logger.debug("The humidity ratio is "+ str(S[4]))
-            logger.debug("The wet bulb temperature is "+ str(toC(S[5])))
+            logger.debug("The dry bulb temperature is " + str(S[0]))
+            logger.debug("The specific enthalpy is " + str(S[1]))
+            logger.debug("The relative humidity is " + str(S[2]))
+            logger.debug("The specific volume is " + str(S[3]))
+            logger.debug("The humidity ratio is " + str(S[4]))
+            logger.debug("The raw wet bulb temperature is " + str(S[5]))
+            logger.debug("The wet bulb temperature is " + str(toC(S[5])))
             logger.debug("SI Results ================================ END")
             self._state = round(toC(S[5]), 2)
 
