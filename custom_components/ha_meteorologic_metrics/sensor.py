@@ -280,11 +280,22 @@ class ClimateMetricsSensor(Entity):
 
             # ensure required inputs for SI.state are present
             if self.temp_out_k is None or self.hum_out is None or self.pressure is None:
-                logger.warning("Insufficient data for psychrometric calculation")
+                logger.warning("Insufficient data for psychrometric calculation (temp=%s hum=%s pressure=%s)",
+                            self.temp_out_k, self.hum_out, self.pressure)
                 self.S = None
             else:
-                S = SI.state("DBT", self.temp_out_k, "RH", self.hum_out/100.0, self.pressure)
-                self.S = S
+                try:
+                    # log inputs to help debug SI library behaviour
+                    logger.debug("Calling psySI.state with DBT=%s K, RH=%s (fraction), P=%s Pa",
+                                 self.temp_out_k, self.hum_out/100.0, self.pressure)
+                    S = SI.state("DBT", self.temp_out_k, "RH", self.hum_out/100.0, self.pressure)
+                    self.S = S
+                    logger.debug("psySI.state returned: %s", repr(S))
+                except Exception:
+                    # include full traceback in log so we can see exact failure point inside psySI
+                    logger.exception("Exception while calling psySI.state (inputs: temp_k=%s, hum=%s, pressure=%s)",
+                                     self.temp_out_k, self.hum_out, self.pressure)
+                    self.S = None
 
             # existing logging and guards for S
             if self.S:
@@ -316,8 +327,9 @@ class ClimateMetricsSensor(Entity):
 
         except AttributeError:
             logger.error("Some entity does not exist or is spelled incorrectly. Did its component initialise correctly?")
-        except Exception as e:
-            logger.error(e)
+        except Exception:
+            # log full traceback for unexpected errors
+            logger.exception("Unexpected exception in update()")
 
     @property
     def available(self):
@@ -343,7 +355,8 @@ class ClimateMetricsSensor(Entity):
         The formula below approximates the heat index in degrees Fahrenheit, to within ±1.3 °F (0.7 °C). It is the result of a multivariate fit (temperature equal to or greater than 80 °F (27 °C) and relative humidity equal to or greater than 40%) to a model of the human body.[1][13] This equation reproduces the above NOAA National Weather Service table (except the values at 90 °F (32 °C) & 45%/70% relative humidity vary unrounded by less than ±1, respectively).
         Params: temperature in Kelvin, and humidity as a percentage
         """
-        if temp_k and hum:
+        # Use explicit None checks (0 or 0.0 are valid values and should not be treated as False)
+        if temp_k is not None and hum is not None:
             T = KtoF(temp_k)
             R = hum
             if T > 80 and R > 40:
@@ -353,11 +366,18 @@ class ClimateMetricsSensor(Entity):
         return None
 
     def calculate_dewpoint(self, temp_out_k, hum_out) -> float:
-        if temp_out_k and hum_out:
-            alpha = m.log(hum_out / 100) + (AA*toC(temp_out_k))/(BB+toC(temp_out_k))
+        # explicit None checks
+        if temp_out_k is not None and hum_out is not None:
+            # protect against invalid humidity values
+            try:
+                alpha = m.log(hum_out / 100) + (AA*toC(temp_out_k)) / (BB + toC(temp_out_k))
+            except Exception:
+                logger.exception("Invalid inputs for dewpoint calc (temp_k=%s, hum=%s)", temp_out_k, hum_out)
+                return None
             dp = (BB*alpha) / (AA - alpha)
             logger.debug("Dew Point Estimate (C): " + str(dp))
             return dp
+
         return None
 
     @property
@@ -404,6 +424,10 @@ class ClimateMetricsSensor(Entity):
 
         T = toC(self.temp_out_k)
         H = self.hum_out
+        # ensure H and T are numeric
+        if not isinstance(H, (int, float)) or not isinstance(T, (int, float)):
+            logger.debug("calculate_wb_stull: non-numeric inputs (T=%s H=%s)", T, H)
+            return None
         if H > 5 and H < 99 and T > -20 and T < 50:
             return T * m.atan(0.151977 * m.pow(H + 8.313659, 0.5)) + m.atan(T + H) - m.atan(H - 1.676331) + 0.00391838 * m.pow(H, 3/2) * m.atan(0.023101 * H) - 4.686035
         return None
