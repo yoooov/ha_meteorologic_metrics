@@ -141,7 +141,7 @@ class ClimateMetricsSensor(Entity):
             attr["wet bulb temp (dew estimate) C"] = round(toC(self.web_bulb_dew), 2)
 
         if self.wet_bulb_stull is not None:
-            attr["wet bulb temp stull estimate C"] = round(self.wet_bulb_stull, 2)
+            attr["wet bulb temp (stull estimate) C"] = round(self.wet_bulb_stull, 2)
 
         if self.comfort_level is not None:
             attr["comfort level "] = self.comfort_level
