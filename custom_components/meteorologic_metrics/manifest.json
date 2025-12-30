@@ -5,5 +5,7 @@
   "dependencies": [],
   "codeowners": ["@danobot", "@yoooov"],
   "requirements": ["psypy==0.0.2"],
-  "version": "1.0.2"
+  "version": "1.0.2",
+  "config_flow": true,
+  "iot_class": "local_polling"
 }

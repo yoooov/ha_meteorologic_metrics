@@ -12,28 +12,63 @@ from homeassistant.helpers.entity import Entity
 import logging
 import math as m
 from psypy import psySI as SI
-from .helpers import *
+
 from homeassistant.const import UnitOfTemperature, UnitOfPressure, PERCENTAGE
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+
+from .helpers import *
+from .const import *
+
 logger = logging.getLogger(__name__)
 
-from .const import *
 
 
 def setup_platform(hass, config, add_devices, discovery_info=None):
-    """Setup the sensor platform."""
+    """Setup the sensor platform (YAML)."""
     add_devices([ClimateMetricsSensor(hass, config)])
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
+    """Set up sensor from a config entry (UI)."""
+    data = entry.data or {}
+    # create entity and pass the entry_id so unique_id can be built
+    async_add_entities([ClimateMetricsSensor(hass, data, entry.entry_id)], True)
+
 
 class ClimateMetricsSensor(Entity):
     """Representation of a Sensor."""
 
-    def __init__(self, hass, config):
-        """Initialize the sensor."""
-        self.hass = hass
-        self.outdoorTemp = config.get(CONF_TEMP)
-        self.outdoorHum = config.get(CONF_HUMIDITY)
-        self.pressureSensor= config.get(CONF_PRESSURE)
+    def __init__(self, hass, config, entry_id: str = None):
+        """Initialize the sensor.
 
-        self.dewSensor = config.get(CONF_DEW_POINT)
+        Accepts either YAML config dict or config entry data dict.
+        """
+        self.hass = hass
+
+        # config may be a Home Assistant platform config (YAML) or a config entry data dict
+        cfg = config or {}
+        self.outdoorTemp = cfg.get(CONF_TEMP)
+        self.outdoorHum = cfg.get(CONF_HUMIDITY)
+        self.pressureSensor = cfg.get(CONF_PRESSURE)
+        self.dewSensor = cfg.get(CONF_DEW_POINT)
+
+        # readable name preference: config name then entry title fallback
+        self._name = cfg.get(CONF_NAME) or "Meteologic Metrics"
+
+        # unique id for UI entity registry (entry_id when from config entry, else derived)
+        if entry_id:
+            self._unique_id = f"{DOMAIN}_{entry_id}"
+        else:
+            # derive a stable id from sensors if possible
+            parts = [
+                (self.outdoorTemp or "").replace(".", "_"),
+                (self.outdoorHum or "").replace(".", "_"),
+                (self.pressureSensor or "").replace(".", "_"),
+            ]
+            self._unique_id = f"{DOMAIN}_{'_'.join([p for p in parts if p])}"
+
+        # internal state vars (units normalized inside update)
         self.dew_temp_k = None
         self.dew_temp_estimate_c = None
         self.temp_out_k = None
@@ -45,11 +80,11 @@ class ClimateMetricsSensor(Entity):
         self.wet_bulb_stull = None
         self.relative_humidity = None
         self.S = None
-        if config.get(CONF_NAME):
-            self._name = config.get(CONF_NAME)
-        else:
-            self._name = "Meteologic Metrics"
         self._state = None
+
+    @property
+    def unique_id(self):
+        return self._unique_id
 
     @property
     def name(self):
@@ -232,7 +267,10 @@ class ClimateMetricsSensor(Entity):
                     logger.debug("dew (raw sensor -> K):     " + str(self.dew_temp_k))
                     logger.debug("Dew (C): " + str(toC(self.dew_temp_k)))
                     # compute web_bulb_dew in Kelvin (both temps in K)
-                    self.web_bulb_dew = self.temp_out_k - (self.temp_out_k - self.dew_temp_k) / 3
+                    if self.temp_out_k is not None:
+                        self.web_bulb_dew = self.temp_out_k - (self.temp_out_k - self.dew_temp_k) / 3
+                    else:
+                        self.web_bulb_dew = None
                     logger.debug("Wet bulb dewpoint depression (K): " + str(self.web_bulb_dew))
                     self.comfort_level = self.determine_comfort(toC(self.dew_temp_k))
             else:
