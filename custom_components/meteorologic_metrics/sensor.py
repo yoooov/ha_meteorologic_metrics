@@ -1,7 +1,7 @@
 """
 Meteorologic Metric component for Home Assistant.
 Maintainer:       Daniel Mason, yoooov
-Version:          v1.0.2
+Version:          v1.0.3
 Documentation:    https://github.com/yoooov/ha_meteorologic_metrics
 Issues Tracker:   Report issues on Github. Ensure you have the latest version. Include:
                     * YAML configuration (for the misbehaving entity)
