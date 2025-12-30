@@ -1,4 +1,8 @@
 {
   "name": "Meteologic Metrics",
+  "description": "Home Assistant integration for meteorologic metrics",
+  "content_in_root": false,
+  "domains": ["sensor"],
+  "render_readme": true,
   "homeassistant": "0.103.0"
 }
