@@ -1,1 +1,1 @@
-"""The example sensor integration."""
+"""The Meteorologic Metrics integration."""
