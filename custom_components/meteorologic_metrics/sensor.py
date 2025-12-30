@@ -1,8 +1,8 @@
 """
 Meteorologic Metric component for Home Assistant.
-Maintainer:       Daniel Mason
-Version:          v0.0.1
-Documentation:    https://github.com/danobot/meteorologic_metrics
+Maintainer:       Daniel Mason, yoooov
+Version:          v1.0.2
+Documentation:    https://github.com/yoooov/ha_meteorologic_metrics
 Issues Tracker:   Report issues on Github. Ensure you have the latest version. Include:
                     * YAML configuration (for the misbehaving entity)
                     * log entries at time of error and at time of initialisation
@@ -22,8 +22,6 @@ from .const import *
 def setup_platform(hass, config, add_devices, discovery_info=None):
     """Setup the sensor platform."""
     add_devices([ClimateMetricsSensor(hass, config)])
-
-
 
 class ClimateMetricsSensor(Entity):
     """Representation of a Sensor."""
@@ -53,7 +51,6 @@ class ClimateMetricsSensor(Entity):
             self._name = "Meteologic Metrics"
         self._state = None
 
-
     @property
     def name(self):
         """Return the name of the sensor."""
@@ -68,7 +65,6 @@ class ClimateMetricsSensor(Entity):
     def unit_of_measurement(self):
         """Return the unit of measurement."""
         return UnitOfTemperature.CELSIUS
-
 
     @property
     def extra_state_attributes(self):
@@ -115,7 +111,6 @@ class ClimateMetricsSensor(Entity):
         if self.comfort_level is not None:
             attr["comfort level "] = self.comfort_level
             attr["comfort level info"] = COMFORT[self.comfort_level]
-
 
         return attr
 
@@ -261,7 +256,6 @@ class ClimateMetricsSensor(Entity):
                 logger.debug("The relative humidity is " + str(self.S[2]))
                 logger.debug("The specific volume is " + str(self.S[3]))
                 logger.debug("The humidity ratio is " + str(self.S[4]))
-                logger.debug("The raw wet bulb temperature is " + str(self.S[5]))
                 if self.S[5] is not None:
                     logger.debug("The wet bulb temperature is " + str(toC(self.S[5])))
                 logger.debug("SI Results ================================ END")
@@ -305,16 +299,12 @@ class ClimateMetricsSensor(Entity):
                     return False
         return True
 
-
     def calculate_heat_index(self, temp_k, hum) -> float:
         """
         https://en.wikipedia.org/wiki/Heat_index
         The formula below approximates the heat index in degrees Fahrenheit, to within ±1.3 °F (0.7 °C). It is the result of a multivariate fit (temperature equal to or greater than 80 °F (27 °C) and relative humidity equal to or greater than 40%) to a model of the human body.[1][13] This equation reproduces the above NOAA National Weather Service table (except the values at 90 °F (32 °C) & 45%/70% relative humidity vary unrounded by less than ±1, respectively).
         Params: temperature in Kelvin, and humidity as a percentage
         """
-
-
-
         if temp_k and hum:
             T = KtoF(temp_k)
             R = hum
@@ -363,6 +353,7 @@ class ClimateMetricsSensor(Entity):
             comfort_level = 0
 
         return comfort_level
+
     def calculate_wb_stull(self) -> float:
         """
             Although many equations have been created over the years our calculator uses the Stull formula,

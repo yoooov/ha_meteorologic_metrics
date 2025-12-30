@@ -1,9 +1,9 @@
 {
   "domain": "meteorologic_metrics",
-  "name": "meteorologic_metrics",
-  "documentation": "https://github.com/danobot/meteorologic_metrics",
+  "name": "Meteorologic Metrics",
+  "documentation": "https://github.com/yoooov/ha_meteorologic_metrics",
   "dependencies": [],
-  "codeowners": ["@danobot"],
+  "codeowners": ["@danobot", "@yoooov"],
   "requirements": ["psypy==0.0.2"],
-  "version": "1.0.1"
+  "version": "1.0.2"
 }
