@@ -13,7 +13,7 @@ import logging
 import math as m
 from psypy import psySI as SI
 from .helpers import *
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import UnitOfTemperature, UnitOfPressure, PERCENTAGE
 logger = logging.getLogger(__name__)
 
 from .const import *
@@ -75,38 +75,44 @@ class ClimateMetricsSensor(Entity):
         attr = {}
 
         if self.S:
-
             S = self.S
-            self.relative_humidity = S[2]
-            attr = {
-                "SI dry bulb temp C": round(toC(S[0]), 2),
-                "SI wet bulb temp C": round(toC(S[5]), 2),
-                "SI specific enthalpy": round(S[1], 2),
-                "SI relative humidity": round(S[2], 2),
-                "SI specific volume": round(S[3], 2),
-                "SI humidity ratio": round(S[4], 2)
-            }
+            # S elements may be None; guard each access
+            if S[2] is not None:
+                self.relative_humidity = S[2]
 
-        if self.temp_out_k:
+            if S[0] is not None:
+                attr["SI dry bulb temp C"] = round(toC(S[0]), 2)
+            if S[5] is not None:
+                attr["SI wet bulb temp C"] = round(toC(S[5]), 2)
+            if S[1] is not None:
+                attr["SI specific enthalpy"] = round(S[1], 2)
+            if S[2] is not None:
+                attr["SI relative humidity"] = round(S[2], 2)
+            if S[3] is not None:
+                attr["SI specific volume"] = round(S[3], 2)
+            if S[4] is not None:
+                attr["SI humidity ratio"] = round(S[4], 2)
+
+        if self.temp_out_k is not None:
             attr['temperature'] = round(toC(self.temp_out_k), 2)
-        if self.hum_out:
+        if self.hum_out is not None:
             attr['humidity'] = self.hum_out
-        if self.dew_temp_k:
-            attr['dew point'] = toC (self.dew_temp_k)
-        if self.dew_temp_estimate_c:
+        if self.dew_temp_k is not None:
+            attr['dew point'] = round(toC(self.dew_temp_k), 2)
+        if self.dew_temp_estimate_c is not None:
             attr['dew point estimate'] = round(self.dew_temp_estimate_c, 2)
-        if self.pressure:
+        if self.pressure is not None:
             attr['pressure (pascals)'] = self.pressure
-        if self.heat_index:
+        if self.heat_index is not None:
             attr['heat index'] = self.heat_index
 
-        if self.web_bulb_dew:
+        if self.web_bulb_dew is not None:
             attr["wet bulb temp (dew estimate) C"] = round(toC(self.web_bulb_dew), 2)
 
-        if self.wet_bulb_stull:
+        if self.wet_bulb_stull is not None:
             attr["wet bulb temp stull estimate C"] = round(self.wet_bulb_stull, 2)
 
-        if self.comfort_level:
+        if self.comfort_level is not None:
             attr["comfort level "] = self.comfort_level
             attr["comfort level info"] = COMFORT[self.comfort_level]
 
@@ -114,58 +120,158 @@ class ClimateMetricsSensor(Entity):
         return attr
 
     def _outdoor_temp(self):
-        return float(self.hass.states.get(self.outdoorTemp).state)
+        """Return outdoor temperature normalized to Kelvin by inspecting unit_of_measurement."""
+        state = self.hass.states.get(self.outdoorTemp)
+        if state is None:
+            return None
+        try:
+            val = float(state.state)
+        except (ValueError, TypeError):
+            logger.warning("Outdoor temp state not numeric: %s", state.state)
+            return None
+
+        unit = state.attributes.get("unit_of_measurement")
+        if unit == UnitOfTemperature.CELSIUS:
+            return toK(val)
+        if unit == UnitOfTemperature.FAHRENHEIT:
+            # convert F -> C -> K
+            return toK(FtoC(val))
+        # assume Kelvin if explicit or unknown; if unit indicates Kelvin string
+        if unit == "K" or unit == "kelvin" or unit == UnitOfTemperature.KELVIN if hasattr(UnitOfTemperature, "KELVIN") else False:
+            return val
+        # fallback: assume Celsius (common)
+        logger.debug("Unknown temperature unit '%s' for %s; assuming Celsius", unit, self.outdoorTemp)
+        return toK(val)
 
     def _pressure(self):
-        """ pressure in millibar == hectopascal == pascal / 100 """
-        return float(self.hass.states.get(self.pressureSensor).state)
+        """Return pressure normalized to Pascals. Reads unit_of_measurement to decide conversion."""
+        state = self.hass.states.get(self.pressureSensor)
+        if state is None:
+            return None
+        try:
+            val = float(state.state)
+        except (ValueError, TypeError):
+            logger.warning("Pressure state not numeric: %s", state.state)
+            return None
+
+        unit = state.attributes.get("unit_of_measurement")
+        # hPa / mbar -> Pa
+        if unit in (UnitOfPressure.HPA, "hPa", "mbar", "mb"):
+            return val * 100.0
+        # Pascals already
+        if unit in (UnitOfPressure.PA, "Pa"):
+            return val
+        # mmHg -> convert to Pa (1 mmHg = 133.322 Pa)
+        if unit in ("mmHg",):
+            return val * 133.322
+        # fallback: assume hPa (common weather sensors) and convert
+        logger.debug("Unknown pressure unit '%s' for %s; assuming hPa", unit, self.pressureSensor)
+        return val * 100.0
 
     def _outdoor_hum(self):
-        return float(self.hass.states.get(self.outdoorHum).state)
+        """Return humidity as percent (0-100)."""
+        state = self.hass.states.get(self.outdoorHum)
+        if state is None:
+            return None
+        try:
+            val = float(state.state)
+        except (ValueError, TypeError):
+            logger.warning("Humidity state not numeric: %s", state.state)
+            return None
+
+        unit = state.attributes.get("unit_of_measurement")
+        if unit == PERCENTAGE or unit == "%":
+            return val
+        # some sensors provide 0-1 fractional humidity
+        if 0.0 <= val <= 1.0:
+            return val * 100.0
+        # fallback: assume already percent
+        logger.debug("Unknown humidity unit '%s' for %s; assuming percent", unit, self.outdoorHum)
+        return val
 
     def _dew_temp(self):
-        return float(self.hass.states.get(self.dewSensor).state)
+        """Return dew point normalized to Kelvin if sensor exists (detect unit)."""
+        state = self.hass.states.get(self.dewSensor)
+        if state is None:
+            return None
+        try:
+            val = float(state.state)
+        except (ValueError, TypeError):
+            logger.warning("Dew point state not numeric: %s", state.state)
+            return None
+
+        unit = state.attributes.get("unit_of_measurement")
+        if unit == UnitOfTemperature.CELSIUS:
+            return toK(val)
+        if unit == UnitOfTemperature.FAHRENHEIT:
+            return toK(FtoC(val))
+        if unit == "K" or unit == UnitOfTemperature.KELVIN if hasattr(UnitOfTemperature, "KELVIN") else False:
+            return val
+        # fallback assume Celsius
+        logger.debug("Unknown dewpoint unit '%s' for %s; assuming Celsius", unit, self.dewSensor)
+        return toK(val)
 
     def update(self):
         if not self._data_available():
             return False
         try:
-            self.temp_out_k = toK(self._outdoor_temp())
+            # normalize inputs using unit-aware getters
+            self.temp_out_k = self._outdoor_temp()
             self.hum_out = self._outdoor_hum()
-
-            self.pressure = self._pressure()*100 # convert hectopascal to pascal
+            self.pressure = self._pressure()  # already in Pascals
 
             logger.debug("Temp outdoor (K):      " + str(self.temp_out_k))
-            logger.debug("Hum outdoor (K):       " + str(self.hum_out))
+            logger.debug("Hum outdoor (%):       " + str(self.hum_out))
             logger.debug("Pressure (pascal): " + str(self.pressure))
 
             if self.dewSensor:
-
-                self.dew_temp_k = self._dew_temp()
-                logger.debug("dew (raw sensor value):     " + str(self.dew_temp_k))
-                logger.debug("Dew (C): " + str(self.dew_temp_k))
-                self.web_bulb_dew = round(self.temp_out_k - (self.temp_out_k-self.dew_temp_k)/3, 2)
-                logger.debug("Wet bulb dewpoint depression (C): " + str(self.web_bulb_dew))
-                self.comfort_level = self.determine_comfort(toC(self.dew_temp_k))
+                dew_k = self._dew_temp()
+                if dew_k is None:
+                    # dew sensor configured but unreadable
+                    logger.warning("Configured dew sensor '%s' unreadable", self.dewSensor)
+                    self.dew_temp_k = None
+                    self.dew_temp_estimate_c = None
+                    self.comfort_level = None
+                else:
+                    self.dew_temp_k = dew_k
+                    logger.debug("dew (raw sensor -> K):     " + str(self.dew_temp_k))
+                    logger.debug("Dew (C): " + str(toC(self.dew_temp_k)))
+                    # compute web_bulb_dew in Kelvin (both temps in K)
+                    self.web_bulb_dew = self.temp_out_k - (self.temp_out_k - self.dew_temp_k) / 3
+                    logger.debug("Wet bulb dewpoint depression (K): " + str(self.web_bulb_dew))
+                    self.comfort_level = self.determine_comfort(toC(self.dew_temp_k))
             else:
+                # no dew sensor configured -> estimate dewpoint from temp & humidity
                 self.dew_temp_estimate_c = self.calculate_dewpoint(self.temp_out_k, self.hum_out)
-                self.comfort_level = self.determine_comfort(toC(self.dew_temp_estimate_c))
+                self.comfort_level = self.determine_comfort(self.dew_temp_estimate_c)
 
+            # ensure required inputs for SI.state are present
+            if self.temp_out_k is None or self.hum_out is None or self.pressure is None:
+                logger.warning("Insufficient data for psychrometric calculation")
+                self.S = None
+            else:
+                S = SI.state("DBT", self.temp_out_k, "RH", self.hum_out/100.0, self.pressure)
+                self.S = S
 
-            S = SI.state("DBT", self.temp_out_k,"RH", self.hum_out/100, self.pressure)
+            # existing logging and guards for S
+            if self.S:
+                logger.debug("SI Results ================================ START")
+                logger.debug("The dry bulb temperature is " + str(self.S[0]))
+                logger.debug("The specific enthalpy is " + str(self.S[1]))
+                logger.debug("The relative humidity is " + str(self.S[2]))
+                logger.debug("The specific volume is " + str(self.S[3]))
+                logger.debug("The humidity ratio is " + str(self.S[4]))
+                logger.debug("The raw wet bulb temperature is " + str(self.S[5]))
+                if self.S[5] is not None:
+                    logger.debug("The wet bulb temperature is " + str(toC(self.S[5])))
+                logger.debug("SI Results ================================ END")
 
-            self.S = S
-
-            logger.debug("SI Results ================================ START")
-            logger.debug("The dry bulb temperature is " + str(S[0]))
-            logger.debug("The specific enthalpy is " + str(S[1]))
-            logger.debug("The relative humidity is " + str(S[2]))
-            logger.debug("The specific volume is " + str(S[3]))
-            logger.debug("The humidity ratio is " + str(S[4]))
-            logger.debug("The raw wet bulb temperature is " + str(S[5]))
-            logger.debug("The wet bulb temperature is " + str(toC(S[5])))
-            logger.debug("SI Results ================================ END")
-            self._state = round(toC(S[5]), 2)
+                if self.S[5] is not None:
+                    self._state = round(toC(self.S[5]), 2)
+                else:
+                    self._state = None
+            else:
+                self._state = None
 
             self.wet_bulb_stull = self.calculate_wb_stull()
             logger.debug("The wet bulb temperature (Stull formulat)) "+ str(self.wet_bulb_stull))
@@ -242,16 +348,18 @@ class ClimateMetricsSensor(Entity):
         return "mdi:circle-outline"
 
     def determine_comfort(self, dp):
-
+        # use elif so a single correct bucket is chosen
+        if dp is None:
+            return None
         if dp > 21:
             comfort_level = 4
-        if dp > 18:
+        elif dp > 18:
             comfort_level = 3
-        if dp > 16:
+        elif dp > 16:
             comfort_level = 2
-        if dp > 10:
+        elif dp > 10:
             comfort_level = 1
-        if dp <= 10:
+        else:
             comfort_level = 0
 
         return comfort_level
@@ -262,6 +370,9 @@ class ClimateMetricsSensor(Entity):
             It loses its accuracy in situations where both moisture and heat are low in value, but even then the error range is only between -1°C to +0.65°C.
             Source: https://www.omnicalculator.com/physics/wet-bulb
         """
+        if self.temp_out_k is None or self.hum_out is None:
+            return None
+
         T = toC(self.temp_out_k)
         H = self.hum_out
         if H > 5 and H < 99 and T > -20 and T < 50:
