@@ -54,7 +54,7 @@ class ClimateMetricsSensor(Entity):
         self.dewSensor = cfg.get(CONF_DEW_POINT)
 
         # readable name preference: config name then entry title fallback
-        self._name = cfg.get(CONF_NAME) or "Meteologic Metrics"
+        self._name = cfg.get(CONF_NAME) or DEFAULT_SENSOR_NAME
 
         # unique id for UI entity registry (entry_id when from config entry, else derived)
         if entry_id:
@@ -376,7 +376,7 @@ class ClimateMetricsSensor(Entity):
         return "mdi:circle-outline"
 
     def determine_comfort(self, dp):
-        # use elif so a single correct bucket is chosen
+        # a single correct bucket is chosen
         if dp is None:
             return None
         if dp > 21:

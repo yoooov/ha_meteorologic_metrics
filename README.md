@@ -54,9 +54,9 @@ Source: https://www.omnicalculator.com/physics/wet-bulb
 ```yaml
 sensors:
   - platform: meteorologic_metrics
-    name: "Meteorologic Metrics"              # optional, use if you want to use mulitple instances
+    name: "Meteorologic Metrics"            # optional, use if you want to use mulitple instances
     temp: sensor.outside_temp               # celsius
-    hum: sensor.outside_hum                 # celsius
+    hum: sensor.outside_hum                 # percent
     dew: sensor.bom_perth_dew_point_c       # required if you want WBT estimated with dewpoint depression
     pressure: sensor.bom_perth_pressure_mb  # millibar == hectopascal == pascal * 100
 ```

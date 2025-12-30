@@ -4,6 +4,7 @@ CONF_HUMIDITY = 'hum'
 CONF_DEW_POINT = 'dew'
 CONF_PRESSURE = 'pressure'
 CONF_NAME = 'name'
+DEFAULT_SENSOR_NAME = 'Meteorologic Metrics'
 
 KELVIN_CONVERSION = 273.15
 
