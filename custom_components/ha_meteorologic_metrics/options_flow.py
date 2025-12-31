@@ -13,6 +13,7 @@ from .const import (
     CONF_NAME,
     DOMAIN,
 )
+EXPOSE_ALL = "expose_all"
 
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
@@ -37,6 +38,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Required(CONF_PRESSURE, default=current.get(CONF_PRESSURE, "")): selector({"entity": {"domain": "sensor"}}),
                 vol.Optional(CONF_DEW_POINT, default=current.get(CONF_DEW_POINT, "")): selector({"entity": {"domain": "sensor"}}),
                 vol.Optional(CONF_NAME, default=current.get(CONF_NAME, "Meteorologic Metrics")): str,
+                vol.Optional(EXPOSE_ALL, default=current.get(EXPOSE_ALL, False)): bool,
             }
         )
 
