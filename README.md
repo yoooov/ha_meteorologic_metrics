@@ -47,7 +47,7 @@ Attribute name: `heat index`
 > The formula below approximates the heat index in degrees Fahrenheit, to within ±1.3 °F (0.7 °C). It is the result of a multivariate fit (temperature equal to or greater than 80 °F (27 °C) and relative humidity equal to or greater than 40%) to a model of the human body. This equation reproduces the above NOAA National Weather Service table (except the values at 90 °F (32 °C) & 45%/70% relative humidity vary unrounded by less than ±1, respectively).
 Source: https://en.wikipedia.org/wiki/Heat_index
 
-The heat index represents the apparent temperature (feels like). It will only be calculated for temperatures above 27C and humidty over 40%.
+The heat index represents the apparent temperature (feels like). **It will only be calculated for temperatures above 27°C and humidty over 40%**.
 
 ## Wet Bulb Temperature Estimations
 
@@ -129,6 +129,28 @@ Include hacs.json at repo root and logo.svg in the release archive. The integrat
 ## Support & docs
 
 Full code and usage examples: https://github.com/yoooov/ha_meteorologic_metrics
+
+## Side notes on psySI.py
+
+- <https://github.com/longapalooza/psypy/blob/master/psySI.py>
+
+```txt
+# All functions expect base SI units for any arguments given
+# DBT   - Dry bulb temperature          - Kelvins, K
+# DPT   - Dew point temperature         - Kelvins, K
+# H     - Specific enthalpy             - kiloJoules per kilogram, kJ/kg
+# P     - Atmospheric pressure          - Pascals, Pa
+# Pw    - Water vapor partial pressure  - Pascals, Pa
+# RH    - Relative humidity             - Decimal (i.e. not a percentage)
+# V     - Specific volume               - Cubic meters per kilogram, m^3/kg
+# W     - Humidity ratio                - kilograms per kilograms, kg/kg
+# WBT   - Wet bulb temperature          - Kelvins, K
+```
+
+### Signature and returned type
+
+Method `def state(prop1, prop1val, prop2, prop2val,P)` with **prop** in `["DBT","WBT","RH","W","V","H"]`
+Return an array `[DBT, H, RH, V, W, WBT]`
 
 ## TODO
 

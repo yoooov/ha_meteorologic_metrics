@@ -12,6 +12,7 @@ from .const import (
     CONF_DEW_POINT,
     CONF_NAME,
     DOMAIN,
+    CONF_INDOOR_SENSOR,
 )
 EXPOSE_ALL = "expose_all"
 
@@ -39,6 +40,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(CONF_DEW_POINT, default=current.get(CONF_DEW_POINT, "")): selector({"entity": {"domain": "sensor"}}),
                 vol.Optional(CONF_NAME, default=current.get(CONF_NAME, "Meteorologic Metrics")): str,
                 vol.Optional(EXPOSE_ALL, default=current.get(EXPOSE_ALL, False)): bool,
+                # indoor sensor toggle, optional for plain meteorologic displays
+                vol.Optional(CONF_INDOOR_SENSOR, default=current.get(CONF_INDOOR_SENSOR, False)): bool,
             }
         )
 

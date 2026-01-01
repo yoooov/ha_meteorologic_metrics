@@ -4,7 +4,7 @@ from homeassistant.core import callback
 from homeassistant.helpers.selector import selector
 import voluptuous as vol
 from typing import Any
-from .const import DOMAIN, CONF_TEMP, CONF_HUMIDITY, CONF_DEW_POINT, CONF_PRESSURE, CONF_NAME, DEFAULT_SENSOR_NAME
+from .const import DOMAIN, CONF_TEMP, CONF_HUMIDITY, CONF_DEW_POINT, CONF_PRESSURE, CONF_NAME, DEFAULT_SENSOR_NAME, CONF_INDOOR_SENSOR
 
 EXPOSE_ALL = "expose_all"
 
@@ -16,6 +16,8 @@ DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_DEW_POINT, default=""): selector({"entity": {"domain": "sensor"}}),
         vol.Optional(CONF_NAME, default=DEFAULT_SENSOR_NAME): str,
         vol.Optional(EXPOSE_ALL, default=False): bool,
+        # HVAC/psychrometrics useful for indoor/energy calculations, optional for plain meteorologic displays
+        vol.Optional(CONF_INDOOR_SENSOR, default=False): bool,
     }
 )
 

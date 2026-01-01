@@ -29,8 +29,17 @@ CACHE_TTL = 30.0  # seconds cache for metrics computations to avoid repeated cal
 
 def setup_platform(hass, config, add_devices, discovery_info=None):
     """Setup the sensor platform (YAML)."""
-    # config is the platform config dict
-    add_devices(build_entities(hass, config))
+    # If the integration has been configured via UI (config entries), avoid creating duplicate entities from YAML.
+    if hass.config_entries.async_entries(DOMAIN):
+        logger.info("Config entry for %s exists, skipping YAML platform setup to avoid duplicate entities", DOMAIN)
+        return
+
+    # build entities from YAML config and add them
+    cfg = config or {}
+    # normalize key names to match expected keys
+    cfg.setdefault(CONF_NAME, cfg.get("name", DEFAULT_SENSOR_NAME))
+    cfg.setdefault("expose_all", bool(cfg.get("expose_all", False)))
+    add_devices(build_entities(hass, cfg), True)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
@@ -83,6 +92,8 @@ class MetricsData:
         self.outdoorHum = self.config.get(CONF_HUMIDITY)
         self.pressureSensor = self.config.get(CONF_PRESSURE)
         self.dewSensor = self.config.get(CONF_DEW_POINT)
+        # if True, compute HVAC fallbacks (enthalpy, w, v) and expose them as attributes
+        self.indoor_source = bool(self.config.get(CONF_INDOOR_SENSOR, False))
 
         self.last_update = 0.0
         self._cache = {}
@@ -130,12 +141,31 @@ class MetricsData:
                 try:
                     logger.debug("MetricsData: calling psySI.state DBT=%s RH=%s P=%s",
                                  result["temp_out_k"], result["hum_out"]/100.0, result["pressure"])
+                    # Try calling with DBT as provided (likely Kelvin in our code)
                     S = SI.state("DBT", result["temp_out_k"], "RH", result["hum_out"]/100.0, result["pressure"])
-                    result["S"] = S
-                    logger.debug("MetricsData: psySI returned %s", repr(S))
                 except Exception:
-                    logger.exception("MetricsData: psySI.state failure")
-                    result["S"] = None
+                    # Retry with DBT converted to Celsius if the library expects °C
+                    try:
+                        logger.debug("MetricsData: retry psySI.state with DBT in °C")
+                        S = SI.state("DBT", toC(result["temp_out_k"]), "RH", result["hum_out"]/100.0, result["pressure"])
+                    except Exception:
+                        logger.exception("MetricsData: psySI.state failure (both attempts)")
+                        S = None
+
+                # Normalize returned S so internal code can assume temperatures are in Kelvin.
+                if S and isinstance(S, (list, tuple)) and len(S) >= 6:
+                    s0 = S[0]
+                    # If returned DBT looks like Celsius (< 200), convert DBT and WBT to Kelvin
+                    if isinstance(s0, (int, float)) and s0 < 200:
+                        logger.debug("MetricsData: psySI returned temperatures in °C, converting to K for internal use")
+                        S = list(S)
+                        S[0] = toK(S[0])
+                        if S[5] is not None:
+                            S[5] = toK(S[5])
+                        S = tuple(S)
+
+                result["S"] = S
+                logger.debug("MetricsData: psySI returned %s", repr(S))
 
             # other derived metrics
             result["wet_bulb_stull_c"] = self._calculate_wb_stull(result["temp_out_k"], result["hum_out"])
@@ -239,6 +269,10 @@ class MetricsData:
                 logger.exception("MetricsData: invalid inputs for dewpoint calc (temp_k=%s, hum=%s)", temp_out_k, hum_out)
         return None
 
+    """
+    heat_index_c is only computed when the Fahrenheit temperature T > 80 and relative humidity R > 40 
+    For typical outdoor temps (well under 80°F) the function returns None, so the attribute is not added.
+    """
     def _calculate_heat_index(self, temp_k, hum):
         if temp_k is not None and hum is not None:
             T = KtoF(temp_k)
@@ -312,7 +346,8 @@ class MetricsBaseSensor(Entity):
 class WetBulbSISensor(MetricsBaseSensor):
     """Main wet-bulb sensor (keeps prior behaviour/state)"""
     def __init__(self, hass, data, name, base_id):
-        super().__init__(hass, data, name, base_id, "Wet bulb (SI)")
+        # use the base name (no suffix) so the sensor's name is the user-provided name
+        super().__init__(hass, data, name, base_id, "")
         self._attr_unit = UnitOfTemperature.CELSIUS
 
     @property
@@ -324,9 +359,37 @@ class WetBulbSISensor(MetricsBaseSensor):
         return UnitOfTemperature.CELSIUS
 
     def _update_from_cache(self, cache):
+        """
+        Prefer psySI wet-bulb (S[5]). If missing, fallback to a dew-based estimate:
+        WBT_est = T_c - (T_c - dew_c)/3 where dew_c is from provided dew sensor or estimated dew point.
+        """
         S = cache.get("S")
+        used_value_c = None
+
+        # 1) prefer psySI wet-bulb if available
         if S and S[5] is not None:
-            self._state = round(toC(S[5]), 2)
+            used_value_c = toC(S[5])
+        else:
+            # 2) try web_bulb_dew_k if computed (when dew sensor provided)
+            web_k = cache.get("web_bulb_dew_k")
+            if web_k is not None:
+                used_value_c = toC(web_k)
+            else:
+                # 3) compute estimate from estimated dew point (if available) and temperature
+                temp_k = cache.get("temp_out_k")
+                dew_est_c = cache.get("dew_temp_estimate_c")
+                # if a dew sensor exists its dew_temp_k was stored in cache["dew_temp_k"]
+                dew_k = cache.get("dew_temp_k")
+                if temp_k is not None:
+                    t_c = toC(temp_k)
+                    if dew_k is not None:
+                        dew_c = toC(dew_k)
+                        used_value_c = t_c - (t_c - dew_c) / 3.0
+                    elif dew_est_c is not None:
+                        used_value_c = t_c - (t_c - dew_est_c) / 3.0
+
+        if used_value_c is not None:
+            self._state = round(used_value_c, 2)
         else:
             self._state = None
 
@@ -337,6 +400,8 @@ class WetBulbSISensor(MetricsBaseSensor):
         attrs = {}
 
         S = cache.get("S")
+        # SI state tuple format expected from psySI.state:
+        # S[0] DBT (K), S[1] specific enthalpy, S[2] RH (fraction), S[3] specific volume, S[4] humidity ratio, S[5] WBT (K)
         if S:
             if S[0] is not None:
                 attrs["SI dry bulb temp C"] = round(toC(S[0]), 2)
@@ -345,22 +410,77 @@ class WetBulbSISensor(MetricsBaseSensor):
             if S[1] is not None:
                 attrs["SI specific enthalpy"] = round(S[1], 2)
             if S[2] is not None:
-                attrs["SI relative humidity"] = round(S[2], 2)
+                # psySI returns RH as fraction; convert to percent
+                rh_val = S[2] * 100.0 if isinstance(S[2], (int, float)) else None
+                attrs["SI relative humidity"] = round(rh_val, 2) if rh_val is not None else None
             if S[3] is not None:
                 attrs["SI specific volume"] = round(S[3], 4)
             if S[4] is not None:
                 attrs["SI humidity ratio"] = round(S[4], 6)
 
-        if cache.get("dew_temp_k") is not None:
-            attrs["dew point"] = round(toC(cache["dew_temp_k"]), 2)
-        if cache.get("dew_temp_estimate_c") is not None:
-            attrs["dew point estimate"] = round(cache["dew_temp_estimate_c"], 2)
+        # dew related: show dew point estimate only when user DID NOT provide a dew sensor
+        if not self._data.dewSensor:
+            if cache.get("dew_temp_estimate_c") is not None:
+                attrs["dew point estimate C"] = round(cache["dew_temp_estimate_c"], 2)
+
+        # also expose the dew point numeric value when a dew sensor was provided (for traceability)
+        """ if self._data.dewSensor and cache.get("dew_temp_k") is not None:
+            attrs["dew point (sensor) C"] = round(toC(cache["dew_temp_k"]), 2) """
+
+        # derived metrics
         if cache.get("heat_index_c") is not None:
-            attrs["heat index"] = round(cache["heat_index_c"], 2)
+            attrs["heat index C"] = round(cache["heat_index_c"], 2)
         if cache.get("wet_bulb_stull_c") is not None:
-            attrs["wet bulb temp (stull) C"] = round(cache["wet_bulb_stull_c"], 2)
+            attrs["wet bulb temp (stull estimate) C"] = round(cache["wet_bulb_stull_c"], 2)
+
+        # include dew-based wet-bulb estimate attribute (if available)
+        # compute same estimate logic as used for state fallback so user sees it in attributes
+        wb_est = None
+        if cache.get("web_bulb_dew_k") is not None:
+            wb_est = toC(cache.get("web_bulb_dew_k"))
+        else:
+            temp_k = cache.get("temp_out_k")
+            dew_k = cache.get("dew_temp_k")
+            dew_est_c = cache.get("dew_temp_estimate_c")
+            if temp_k is not None:
+                t_c = toC(temp_k)
+                if dew_k is not None:
+                    dew_c = toC(dew_k)
+                    wb_est = t_c - (t_c - dew_c) / 3.0
+                elif dew_est_c is not None:
+                    wb_est = t_c - (t_c - dew_est_c) / 3.0
+        if wb_est is not None:
+            attrs["wet bulb temp (dew estimate) C"] = round(wb_est, 2)
+
+        # comfort level (numeric) and human-friendly info
         if cache.get("comfort_level") is not None:
-            attrs["comfort level"] = cache["comfort_level"]
+            lvl = cache.get("comfort_level")
+            attrs["comfort level"] = lvl
+            try:
+                # COMFORT list from const.py
+                attrs["comfort level info"] = COMFORT[int(lvl)] if 0 <= int(lvl) < len(COMFORT) else None
+            except Exception:
+                attrs["comfort level info"] = None
+
+        # Input entities: provide both current numeric values and entity IDs for reference
+        if cache.get("temp_out_k") is not None:
+            attrs["temperature_C"] = round(toC(cache.get("temp_out_k")), 2)
+        if cache.get("hum_out") is not None:
+            attrs["humidity_percent"] = round(cache.get("hum_out"), 2)
+        if cache.get("pressure") is not None:
+            # present pressure in hPa for readability
+            attrs["pressure_hPa"] = round(cache.get("pressure") / 100.0, 2)
+        if cache.get("dew_temp_k") is not None:
+                attrs["dew_C"] = round(toC(cache.get("dew_temp_k")), 2)
+
+        if self._data.outdoorTemp:
+            attrs["input_temperature_entity"] = self._data.outdoorTemp
+        if self._data.outdoorHum:
+            attrs["input_humidity_entity"] = self._data.outdoorHum
+        if self._data.pressureSensor:
+            attrs["input_pressure_entity"] = self._data.pressureSensor
+        if self._data.dewSensor:
+            attrs["input_dew_entity"] = self._data.dewSensor
 
         return attrs
 
@@ -438,7 +558,7 @@ class SIHumidityRatioSensor(MetricsBaseSensor):
 
 class WetBulbStullSensor(MetricsBaseSensor):
     def __init__(self, hass, data, name, base_id):
-        super().__init__(hass, data, name, base_id, "wet bulb temp (stull) C")
+        super().__init__(hass, data, name, base_id, "wet bulb temp (stull estimate) C")
     @property
     def unit_of_measurement(self):
         return UnitOfTemperature.CELSIUS

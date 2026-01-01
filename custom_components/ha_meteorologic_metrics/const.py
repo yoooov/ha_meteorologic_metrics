@@ -6,6 +6,9 @@ CONF_PRESSURE = 'pressure'
 CONF_NAME = 'name'
 DEFAULT_SENSOR_NAME = 'Meteorologic Metrics'
 
+# New option to indicate sensors are indoor (enable HVAC fallbacks/attributes)
+CONF_INDOOR_SENSOR = 'indoor_sensor_source'
+
 KELVIN_CONVERSION = 273.15
 
 # Due point estimation
